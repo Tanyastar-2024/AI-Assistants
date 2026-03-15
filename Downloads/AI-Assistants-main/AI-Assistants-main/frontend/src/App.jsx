@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Arena from './pages/Arena';
 
 // import UploadLecture from './UploadLecture';
 // <UploadLecture onComplete={({ summary, flashcards, quizItems }) => {
@@ -9,20 +11,50 @@ import Dashboard from './pages/Dashboard';
 
 // In App.jsx (React Router example)
 import UploadLecture from './pages/UploadLecture';
+import MyLectures from './pages/MyLectures';
+import LectureDetail from './pages/LectureDetail';
+
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  return isAuthenticated ? children : <Navigate to="/login" />;
+};
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* If they go to the root URL, redirect them to the login page for now */}
-        <Route path="/" element={<Navigate to="/login" />} />
-        
-        {/* The actual routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/upload" element={<UploadLecture />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* If they go to the root URL, redirect them to the login page for now */}
+          <Route path="/" element={<Navigate to="/login" />} />
+
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Protected routes */}
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/upload" element={<ProtectedRoute><UploadLecture /></ProtectedRoute>} />
+          <Route path="/lectures" element={<ProtectedRoute><MyLectures /></ProtectedRoute>} />
+          <Route path="/lecture/:lectureId" element={<ProtectedRoute><LectureDetail /></ProtectedRoute>} />
+          <Route path="/arena" element={<ProtectedRoute><Arena /></ProtectedRoute>} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

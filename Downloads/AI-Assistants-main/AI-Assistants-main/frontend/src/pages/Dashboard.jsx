@@ -1,41 +1,13 @@
 // src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase'; // Import Firebase
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
+import { signOut } from 'firebase/auth';
+import { auth } from '../firebase';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const [userName, setUserName] = useState('Scholar');
-
-    // Firebase Real-time Auth Listener
-    useEffect(() => {
-        // This function automatically runs whenever the login status changes
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // User IS logged in. Let's get their name from Firestore.
-                try {
-                    const docRef = doc(db, "users", user.uid);
-                    const docSnap = await getDoc(docRef);
-                    
-                    if (docSnap.exists() && docSnap.data().name) {
-                        setUserName(docSnap.data().name); // Get name from database
-                    } else if (user.displayName) {
-                        setUserName(user.displayName); // Fallback to Google name
-                    }
-                } catch (error) {
-                    console.error("Error fetching user data:", error);
-                }
-            } else {
-                // User is NOT logged in. Kick them to the login screen.
-                navigate('/login');
-            }
-        });
-
-        // Cleanup the listener when the component unmounts
-        return () => unsubscribe();
-    }, [navigate]);
+    const { user, userName } = useAuth();
 
     // Firebase Secure Logout
     const handleLogout = async () => {
@@ -86,6 +58,19 @@ export default function Dashboard() {
                     </div>
                     <div className="nav-item" onClick={() => navigate('/upload')}> 
                         <span className="nav-icon">📤</span> Upload Lecture
+                    </div>
+                    <div className="nav-item" onClick={() => navigate('/lectures')}>
+                        <span className="nav-icon">📚</span> My Lectures
+                    </div>
+                </div>
+
+                 <div className="nav-section">
+                    {/* <div className="nav-label">Main</div>
+                    <div className="nav-item active">
+                        <span className="nav-icon">⚡</span> Boss Arena
+                    </div> */}
+                    <div className="nav-item" onClick={() => navigate('/Arena')}> 
+                        <span className="nav-icon">📤</span> Boss Arena
                     </div>
                 </div>
 
