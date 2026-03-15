@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 
 export default function MyLectures() {
   const navigate = useNavigate();
@@ -156,11 +156,14 @@ export default function MyLectures() {
           <div className="nav-item" onClick={() => navigate('/Arena')}>
             <span className="nav-icon">⚔️</span> Boss Arena
           </div>
+          <div className="nav-item" onClick={() => navigate('/bomb')}>
+            <span className="nav-icon">💣</span> Bomb Defusal
+          </div>
         </div>
 
         <div className="nav-section">
           <div className="nav-label">Study Tools</div>
-          <div className="nav-item" onClick={() => alert("Flashcards coming soon!")}>
+          <div className="nav-item" onClick={() => navigate('/flashcards')}>
             <span className="nav-icon">🃏</span> Flashcards
             <span className="nav-badge">24</span>
           </div>
@@ -234,46 +237,6 @@ export default function MyLectures() {
                   }}
                 >
                   Upload Your First Lecture
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!user) return;
-                    try {
-                      const testData = {
-                        userId: user.uid,
-                        files: [],
-                        textContent: 'This is a test lecture content for debugging purposes.',
-                        aiGenerated: {
-                          summary: 'This is a test summary generated for debugging.',
-                          flashcards: [
-                            { question: 'What is this?', answer: 'A test flashcard.' },
-                            { question: 'How does this work?', answer: 'It works by testing the system.' }
-                          ],
-                          quiz: [
-                            { question: 'Is this a test?', options: ['Yes', 'No', 'Maybe', 'I don\'t know'], correct: 0 }
-                          ]
-                        },
-                        createdAt: new Date(),
-                        title: 'Test Lecture'
-                      };
-                      await addDoc(collection(db, 'lectures'), testData);
-                      loadLectures(user.uid); // Reload lectures
-                    } catch (error) {
-                      console.error('Error creating test lecture:', error);
-                    }
-                  }}
-                  style={{
-                    background: 'var(--green)',
-                    color: 'white',
-                    border: 'none',
-                    padding: '12px 24px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '600'
-                  }}
-                >
-                  Create Test Lecture
                 </button>
               </div>
             </div>

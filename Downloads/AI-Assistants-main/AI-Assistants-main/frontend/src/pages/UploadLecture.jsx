@@ -698,6 +698,9 @@ export default function UploadLecture() {
                 <div className="nav-item" onClick={() => navigate('/Arena')}> 
                     <span className="nav-icon">📤</span> Boss Arena
                 </div>
+                <div className="nav-item" onClick={() => navigate('/bomb')}>
+                    <span className="nav-icon">💣</span> Bomb Defusal
+                </div>
             </div>
 
             <div className="nav-section">

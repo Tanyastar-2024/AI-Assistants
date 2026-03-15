@@ -56,7 +56,7 @@ export default function Dashboard() {
                     <div className="nav-item active">
                         <span className="nav-icon">⚡</span> Dashboard
                     </div>
-                    <div className="nav-item" onClick={() => navigate('/upload')}> 
+                    <div className="nav-item" onClick={() => navigate('/upload')}>
                         <span className="nav-icon">📤</span> Upload Lecture
                     </div>
                     <div className="nav-item" onClick={() => navigate('/lectures')}>
@@ -64,19 +64,24 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                 <div className="nav-section">
+                <div className="nav-section">
                     {/* <div className="nav-label">Main</div>
                     <div className="nav-item active">
                         <span className="nav-icon">⚡</span> Boss Arena
                     </div> */}
-                    <div className="nav-item" onClick={() => navigate('/Arena')}> 
+                    <div className="nav-item" onClick={() => navigate('/Arena')}>
                         <span className="nav-icon">📤</span> Boss Arena
+                    </div>
+                    <div className="nav-item" onClick={() => navigate('/bomb')}>
+                        <span className="nav-icon">📤</span> Bomb Defusal
                     </div>
                 </div>
 
+
+
                 <div className="nav-section">
                     <div className="nav-label">Study Tools</div>
-                    <div className="nav-item" onClick={() => alert("Flashcards coming soon!")}>
+                    <div className="nav-item" onClick={() => navigate('/flashcards')}>
                         <span className="nav-icon">🃏</span> Flashcards
                         <span className="nav-badge">24</span>
                     </div>
@@ -115,7 +120,7 @@ export default function Dashboard() {
             {/* Main Content */}
             <main className="main">
                 <div id="page-dashboard" className="page active">
-                    
+
                     {/* Dynamic Welcome Header */}
                     <div className="page-header">
                         <div className="breadcrumb">STUDYQUEST / HOME</div>
@@ -177,7 +182,7 @@ export default function Dashboard() {
                                 <div className="action-card-label">Upload Lecture</div>
                                 <div className="action-card-sub">PDF, slides, notes</div>
                             </div>
-                            <div className="action-card" onClick={() => alert("Flashcards coming soon!")}>
+                            <div className="action-card" onClick={() => navigate('/flashcards')}>
                                 <div className="action-card-icon">🃏</div>
                                 <div className="action-card-label">Study Flashcards</div>
                                 <div className="action-card-sub">24 cards due</div>
@@ -197,11 +202,11 @@ export default function Dashboard() {
 
                     {/* Bottom Split Section */}
                     <div className="grid-2" style={{ marginTop: '28px' }}>
-                        
+
                         {/* Recent Lectures */}
                         <div className="card">
                             <div className="card-title">Recent Lectures</div>
-                            
+
                             <div className="lecture-item">
                                 <div className="lecture-icon">📊</div>
                                 <div className="lecture-info">
@@ -213,7 +218,7 @@ export default function Dashboard() {
                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>mastered</div>
                                 </div>
                             </div>
-                            
+
                             <div className="lecture-item">
                                 <div className="lecture-icon">🧬</div>
                                 <div className="lecture-info">
@@ -225,7 +230,7 @@ export default function Dashboard() {
                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>mastered</div>
                                 </div>
                             </div>
-                            
+
                             <div className="lecture-item">
                                 <div className="lecture-icon">⚖️</div>
                                 <div className="lecture-info">
@@ -248,7 +253,7 @@ export default function Dashboard() {
                                     <div className="streak-label">Day Streak — Keep it going!</div>
                                 </div>
                             </div>
-                            
+
                             <div className="card">
                                 <div className="card-title">This Month</div>
                                 <div className="streak-calendar">

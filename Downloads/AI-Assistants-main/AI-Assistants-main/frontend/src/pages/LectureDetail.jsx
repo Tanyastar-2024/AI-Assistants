@@ -161,11 +161,14 @@ export default function LectureDetail() {
           <div className="nav-item" onClick={() => navigate('/Arena')}>
             <span className="nav-icon">⚔️</span> Boss Arena
           </div>
+          <div className="nav-item" onClick={() => navigate('/bomb')}>
+            <span className="nav-icon">💣</span> Bomb Defusal
+          </div>
         </div>
 
         <div className="nav-section">
           <div className="nav-label">Study Tools</div>
-          <div className="nav-item" onClick={() => alert("Flashcards coming soon!")}>
+          <div className="nav-item" onClick={() => navigate('/flashcards')}>
             <span className="nav-icon">🃏</span> Flashcards
             <span className="nav-badge">24</span>
           </div>

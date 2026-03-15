@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, collection, query, where, getDocs } from 'firebase/firestore';
 
 const HeroCharacter = ({ skinColor, shirtColor, isSwinging, isTakingDamage, isDead }) => (
     <svg 
@@ -64,13 +64,35 @@ export default function Arena() {
                 return;
             }
 
-            const docSnap = await getDoc(doc(db, "users", user.uid));
-            if (docSnap.exists() && docSnap.data().bossQuestions) {
-                const questions = docSnap.data().bossQuestions;
-                setAiQuestions(questions);
-                setBossDialogue(questions[0].question);
-            } else {
-                setBossDialogue("No active quest! Go to Dashboard and upload notes first.");
+            try {
+                // Load all flashcards from user's lectures
+                const q = query(collection(db, 'lectures'), where('userId', '==', user.uid));
+                const querySnapshot = await getDocs(q);
+
+                const allFlashcards = [];
+                querySnapshot.forEach((doc) => {
+                    const lectureData = doc.data();
+                    if (lectureData.aiGenerated?.flashcards) {
+                        // Add flashcards with lecture context
+                        const lectureFlashcards = lectureData.aiGenerated.flashcards.map(card => ({
+                            ...card,
+                            lectureTitle: lectureData.title || 'Unknown Lecture'
+                        }));
+                        allFlashcards.push(...lectureFlashcards);
+                    }
+                });
+
+                if (allFlashcards.length > 0) {
+                    // Shuffle the flashcards for variety
+                    const shuffledFlashcards = allFlashcards.sort(() => Math.random() - 0.5);
+                    setAiQuestions(shuffledFlashcards);
+                    setBossDialogue(`${shuffledFlashcards[0].question} (From: ${shuffledFlashcards[0].lectureTitle})`);
+                } else {
+                    setBossDialogue("No flashcards found! Upload some lectures first to generate study materials.");
+                }
+            } catch (error) {
+                console.error('Error loading flashcards:', error);
+                setBossDialogue("Error loading battle data. Please try again.");
             }
         };
         loadBattleData();
@@ -105,9 +127,9 @@ export default function Arena() {
                     setTimeout(() => { setIsBossTakingDamage(false); setShouldShake(false); }, 400);
 
                     if (newHp === 0) {
-                        setBossDialogue("NOOOOO! My syntax... is... broken...");
+                        setBossDialogue("NOOOOO! My knowledge... is... defeated...");
                         playHurtSound("Level Up! Excellent work!", 1.2);
-                        
+
                         // REWARD XP IN FIREBASE
                         const userRef = doc(db, "users", auth.currentUser.uid);
                         await updateDoc(userRef, { xp: increment(100) });
@@ -115,10 +137,11 @@ export default function Arena() {
                         const nextIndex = currentQIndex + 1;
                         if (nextIndex < aiQuestions.length) {
                             setCurrentQIndex(nextIndex);
-                            setBossDialogue(aiQuestions[nextIndex].question);
+                            const nextQuestion = aiQuestions[nextIndex];
+                            setBossDialogue(`${nextQuestion.question} (From: ${nextQuestion.lectureTitle})`);
                         } else {
-                            // If they answered all questions but dragon still has HP, loop or win
-                            setBossDialogue("You've answered all my riddles... but I still stand!");
+                            // If they answered all questions but boss still has HP, loop or win
+                            setBossDialogue("You've mastered all flashcards... but I still stand!");
                         }
                         playHurtSound("Ouch!", 0.5);
                     }
@@ -137,7 +160,7 @@ export default function Arena() {
                         setBossDialogue("YOU HAVE PERISHED!");
                         playHurtSound("Ugh... the dragon won...", 0.8);
                     } else {
-                        setBossDialogue(`WRONG! The correct answer was: ${currentQuestion.answer}`);
+                        setBossDialogue(`WRONG! The correct answer was: ${currentQuestion.answer} (From: ${currentQuestion.lectureTitle})`);
                         playHurtSound("Oof!", 1.5);
                     }
                 }, 600);
@@ -193,7 +216,6 @@ export default function Arena() {
                 </div>
 
                 {isShootingSlash && <div className="slash-beam"></div>}
-                
                 <div className="boss-bubble">
                     {bossDialogue}
                     <div className="bubble-tail"></div>

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Arena from './pages/Arena';
+import BombDefusal from './pages/BombDefusal';
 
 // import UploadLecture from './UploadLecture';
 // <UploadLecture onComplete={({ summary, flashcards, quizItems }) => {
@@ -13,6 +14,7 @@ import Arena from './pages/Arena';
 import UploadLecture from './pages/UploadLecture';
 import MyLectures from './pages/MyLectures';
 import LectureDetail from './pages/LectureDetail';
+import Flashcards from './pages/Flashcards';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -52,6 +54,8 @@ function App() {
           <Route path="/lectures" element={<ProtectedRoute><MyLectures /></ProtectedRoute>} />
           <Route path="/lecture/:lectureId" element={<ProtectedRoute><LectureDetail /></ProtectedRoute>} />
           <Route path="/arena" element={<ProtectedRoute><Arena /></ProtectedRoute>} />
+          <Route path="/bomb" element={<ProtectedRoute><BombDefusal /></ProtectedRoute>} />
+          <Route path="/flashcards" element={<ProtectedRoute><Flashcards /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
