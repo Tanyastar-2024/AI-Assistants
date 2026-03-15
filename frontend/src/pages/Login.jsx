@@ -1,7 +1,7 @@
-// src/pages/Login.jsx
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db, googleProvider } from '../firebase'; // Import your Firebase setup
+import { auth, db, googleProvider } from '../firebase'; 
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 

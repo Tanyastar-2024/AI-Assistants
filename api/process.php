@@ -44,12 +44,18 @@ $response = curl_exec($ch);
 curl_close($ch);
 
 $result = json_decode($response, true);
-$aiText = $result['candidates'][0]['content']['parts'][0]['text'];
 
-// REMOVE MARKDOWN (Gemini sometimes adds ```json ... ```)
+// Add a check: If Gemini fails, don't crash the script
+if (!isset($result['candidates'][0]['content']['parts'][0]['text'])) {
+    echo json_encode(["error" => "AI failed to respond", "details" => $result]);
+    exit;
+}
+
+$aiText = $result['candidates'][0]['content']['parts'][0]['text'];
 $cleanJSON = preg_replace('/^```json\s+|```$/', '', trim($aiText));
 
-header('Content-Type: application/json');
-echo $cleanJSON; // Send only the clean JSON string
+// Wipe any previous accidental output (like warnings) before sending the JSON
+ob_clean(); 
+echo $cleanJSON; 
 exit;
 ?>
