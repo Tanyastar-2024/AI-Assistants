@@ -1,52 +1,55 @@
 // src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase'; // Import Firebase
+import { auth, db } from '../firebase'; 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export default function Dashboard() {
     const navigate = useNavigate();
     const [userName, setUserName] = useState('Scholar');
+    const [questBrief, setQuestBrief] = useState(null);
+    const [rawText, setRawText] = useState("");
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    // Firebase Real-time Auth Listener
+    // --- NEW DYNAMIC XP STATES ---
+    const [xp, setXp] = useState(0);
+
     useEffect(() => {
-        // This function automatically runs whenever the login status changes
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // User IS logged in. Let's get their name from Firestore.
                 try {
                     const docRef = doc(db, "users", user.uid);
                     const docSnap = await getDoc(docRef);
-                    
-                    if (docSnap.exists() && docSnap.data().name) {
-                        setUserName(docSnap.data().name); // Get name from database
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setUserName(data.name || 'Scholar');
+                        if (data.latestSummary) setQuestBrief(data.latestSummary);
+                        
+                        // Set XP from database
+                        setXp(data.xp || 0);
                     } else if (user.displayName) {
-                        setUserName(user.displayName); // Fallback to Google name
+                        setUserName(user.displayName);
                     }
                 } catch (error) {
                     console.error("Error fetching user data:", error);
                 }
             } else {
-                // User is NOT logged in. Kick them to the login screen.
                 navigate('/login');
             }
         });
-
-        // Cleanup the listener when the component unmounts
         return () => unsubscribe();
     }, [navigate]);
 
-    // Firebase Secure Logout
+    // --- LEVEL CALCULATIONS ---
+    const level = Math.floor(xp / 500) + 1;
+    const xpInCurrentLevel = xp % 500;
+    const progressPercent = (xpInCurrentLevel / 500) * 100;
+    const xpNeeded = 500 - xpInCurrentLevel;
+
+    
     const handleLogout = async () => {
-        try {
-            await signOut(auth);
-            // We don't even need to navigate here, because onAuthStateChanged 
-            // will instantly see they logged out and kick them to /login automatically!
-        } catch (error) {
-            console.error('Error logging out:', error);
-            alert('Logout failed.');
-        }
+        try { await signOut(auth); } catch (error) { alert('Logout failed.'); }
     };
 
     const renderCalendar = () => {
@@ -65,14 +68,12 @@ export default function Dashboard() {
 
     return (
         <div className="app">
-            {/* Background Orbs */}
             <div className="bg-orbs">
                 <div className="orb orb1"></div>
                 <div className="orb orb2"></div>
                 <div className="orb orb3"></div>
             </div>
 
-            {/* Sidebar */}
             <aside className="sidebar">
                 <div className="sidebar-logo">
                     <div className="logo-title">StudyQuest</div>
@@ -81,197 +82,173 @@ export default function Dashboard() {
 
                 <div className="nav-section">
                     <div className="nav-label">Main</div>
-                    <div className="nav-item active">
+                    <div className="nav-item active" onClick={() => navigate('/dashboard')}>
                         <span className="nav-icon">⚡</span> Dashboard
                     </div>
-                    <div className="nav-item" onClick={() => alert("Upload page coming soon!")}>
+                    <div className="nav-item" onClick={() => alert("Logic connected to input box below!")}>
                         <span className="nav-icon">📤</span> Upload Lecture
                     </div>
                 </div>
 
                 <div className="nav-section">
                     <div className="nav-label">Study Tools</div>
-                    <div className="nav-item" onClick={() => alert("Flashcards coming soon!")}>
-                        <span className="nav-icon">🃏</span> Flashcards
-                        <span className="nav-badge">24</span>
+                    <div className="nav-item" onClick={() => navigate('/arena')}>
+                        <span className="nav-icon">🎮</span> Boss Arena
                     </div>
-                    <div className="nav-item" onClick={() => alert("Quiz coming soon!")}>
-                        <span className="nav-icon">🎮</span> Quiz Mode
+                    <div className="nav-item">
+                        <span className="nav-icon">🃏</span> Flashcards <span className="nav-badge">24</span>
                     </div>
-                    <div className="nav-item" onClick={() => alert("AI Tutor coming soon!")}>
+                    <div className="nav-item">
                         <span className="nav-icon">🤖</span> AI Tutor
                     </div>
                 </div>
 
                 <div className="nav-section">
                     <div className="nav-label">Progress</div>
-                    <div className="nav-item" onClick={() => alert("Leaderboard coming soon!")}>
+                    <div className="nav-item">
                         <span className="nav-icon">🏆</span> Leaderboard
                     </div>
                 </div>
 
-                {/* Logout Button */}
                 <div className="nav-section" style={{ marginTop: 'auto' }}>
                     <div className="nav-item" onClick={handleLogout} style={{ color: 'var(--pink)', cursor: 'pointer' }}>
                         <span className="nav-icon">🚪</span> Log Out
                     </div>
                 </div>
 
-                {/* Dynamic User Profile Area */}
-                <div className="sidebar-user" style={{ marginTop: '0' }}>
+                <div className="sidebar-user">
                     <div className="user-avatar">{userName.charAt(0).toUpperCase()}</div>
                     <div className="user-info">
                         <div className="user-name">{userName}</div>
-                        <div className="user-level">⚡ Level 7 Scholar</div>
+                        {/* DYNAMIC SIDEBAR LEVEL */}
+                        <div className="user-level">⚡ Level {level} Scholar</div>
                     </div>
                 </div>
             </aside>
 
-            {/* Main Content */}
             <main className="main">
                 <div id="page-dashboard" className="page active">
                     
-                    {/* Dynamic Welcome Header */}
                     <div className="page-header">
                         <div className="breadcrumb">STUDYQUEST / HOME</div>
                         <h1>Welcome back, {firstName} ✦</h1>
                         <p>Ready to level up your knowledge today?</p>
                     </div>
 
-                    {/* Progress Welcome Box */}
-                    <div className="dashboard-welcome">
+                    {/* DYNAMIC PROGRESS BOX */}
+                    <div className="dashboard-welcome" style={{ marginBottom: '25px' }}>
                         <div>
                             <div className="welcome-title">Your Quest Continues</div>
-                            <div className="welcome-subtitle">480 XP to next level • 3 lectures to review</div>
+                            <div className="welcome-subtitle">{xpNeeded} XP to next level</div>
                             <div style={{ marginTop: '16px' }}>
-                                <div className="xp-label">
-                                    <span>XP Progress</span><span>1,980 / 2,600</span>
+                                <div className="xp-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>XP Progress</span>
+                                    <span>{xpInCurrentLevel} / 500</span>
                                 </div>
-                                <div className="progress-bar" style={{ height: '8px' }}>
-                                    <div className="progress-fill" style={{ width: '76%' }}></div>
+                                <div className="progress-bar" style={{ height: '8px', background: '#1e293b', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div 
+                                        className="progress-fill" 
+                                        style={{ 
+                                            width: `${progressPercent}%`, 
+                                            height: '100%', 
+                                            background: '#10b981',
+                                            transition: 'width 1s ease-in-out'
+                                        }}
+                                    ></div>
                                 </div>
                             </div>
                         </div>
-                        <div className="level-pill">⚡ Level 7 Scholar</div>
+                        <div className="level-pill">⚡ Level {level}</div>
                     </div>
 
-                    {/* Stats Row */}
+                    {/* AI INPUT BOX */}
+                    <div className="card" style={{ marginBottom: '28px', border: '1px solid #334155' }}>
+                        <div className="card-title" style={{ fontSize: '14px', marginBottom: '10px' }}>📤 Feed the AI Your Notes</div>
+                        <textarea 
+                            value={rawText}
+                            onChange={(e) => setRawText(e.target.value)}
+                            placeholder="Paste your lecture notes here..."
+                            style={{ 
+                                width: '100%', height: '100px', backgroundColor: '#0f172a', color: 'white', 
+                                border: '1px solid #334155', borderRadius: '8px', padding: '12px', 
+                                fontSize: '14px', outline: 'none', resize: 'none', marginBottom: '10px' 
+                            }}
+                        />
+                        <button 
+                            onClick={handleProcessLecture}
+                            disabled={isProcessing || !rawText.trim()}
+                            style={{ 
+                                width: '100%', padding: '12px', backgroundColor: isProcessing ? '#475569' : '#3b82f6', 
+                                color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'
+                            }}
+                        >
+                            {isProcessing ? "Gemini is thinking..." : "Generate Quest ✦"}
+                        </button>
+                    </div>
+
+                    {questBrief && (
+                        <div className="card" style={{ borderLeft: '4px solid #f43f5e', background: 'rgba(30, 41, 59, 0.4)', marginBottom: '28px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                                <span style={{ fontSize: '20px' }}>📜</span>
+                                <h3 style={{ margin: 0, fontSize: '14px', color: '#f43f5e', letterSpacing: '1px', fontWeight: 'bold' }}>ACTIVE QUEST BRIEFING</h3>
+                            </div>
+                            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#cbd5e1', marginBottom: '15px', background: 'rgba(15, 23, 42, 0.3)', padding: '15px', borderRadius: '8px' }}>
+                                {questBrief}
+                            </p>
+                            <button onClick={() => navigate('/arena')} className="btn" style={{ background: '#f43f5e', border: 'none', color: 'white', padding: '10px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+                                ENTER ARENA ⚔️
+                            </button>
+                        </div>
+                    )}
+
                     <div className="grid-4" style={{ marginBottom: '28px' }}>
-                        <div className="stat-card">
-                            <div className="stat-icon">🔥</div>
-                            <div className="stat-value">12</div>
-                            <div className="stat-label">Day Streak</div>
-                            <div className="stat-change">↑ Personal best!</div>
-                        </div>
-                        <div className="stat-card">
-                            <div className="stat-icon">🃏</div>
-                            <div className="stat-value">248</div>
-                            <div className="stat-label">Cards Mastered</div>
-                            <div className="stat-change">↑ 14 this week</div>
-                        </div>
-                        <div className="stat-card">
-                            <div className="stat-icon">🎯</div>
-                            <div className="stat-value">87%</div>
-                            <div className="stat-label">Quiz Accuracy</div>
-                            <div className="stat-change">↑ 5% from last week</div>
-                        </div>
-                        <div className="stat-card">
-                            <div className="stat-icon">📚</div>
-                            <div className="stat-value">9</div>
-                            <div className="stat-label">Lectures Uploaded</div>
-                            <div className="stat-change">2 processed today</div>
-                        </div>
+                        <div className="stat-card"><div className="stat-icon">🔥</div><div className="stat-value">12</div><div className="stat-label">Day Streak</div></div>
+                        <div className="stat-card"><div className="stat-icon">🃏</div><div className="stat-value">248</div><div className="stat-label">Cards Mastered</div></div>
+                        <div className="stat-card"><div className="stat-icon">🎯</div><div className="stat-value">87%</div><div className="stat-label">Accuracy</div></div>
+                        <div className="stat-card"><div className="stat-icon">📚</div><div className="stat-value">9</div><div className="stat-label">Lectures</div></div>
                     </div>
 
-                    {/* Quick Actions */}
-                    <div className="quick-actions">
+                    <div className="quick-actions" style={{ marginBottom: '28px' }}>
                         <div className="quick-actions-title">Quick Actions</div>
                         <div className="action-cards">
-                            <div className="action-card" onClick={() => alert("Upload page coming soon!")}>
-                                <div className="action-card-icon">📤</div>
-                                <div className="action-card-label">Upload Lecture</div>
-                                <div className="action-card-sub">PDF, slides, notes</div>
-                            </div>
-                            <div className="action-card" onClick={() => alert("Flashcards coming soon!")}>
-                                <div className="action-card-icon">🃏</div>
-                                <div className="action-card-label">Study Flashcards</div>
-                                <div className="action-card-sub">24 cards due</div>
-                            </div>
-                            <div className="action-card" onClick={() => alert("Quiz coming soon!")}>
+                            <div className="action-card" onClick={() => navigate('/arena')}>
                                 <div className="action-card-icon">🎮</div>
-                                <div className="action-card-label">Take Quiz</div>
-                                <div className="action-card-sub">Earn XP & rank up</div>
+                                <div className="action-card-label">Boss Arena</div>
                             </div>
-                            <div className="action-card" onClick={() => alert("AI Tutor coming soon!")}>
+                            <div className="action-card">
+                                <div className="action-card-icon">🎲</div>
+                                <div className="action-card-label">Daily Quiz</div>
+                            </div>
+                            <div className="action-card">
                                 <div className="action-card-icon">🤖</div>
-                                <div className="action-card-label">Ask AI Tutor</div>
-                                <div className="action-card-sub">Get instant help</div>
+                                <div className="action-card-label">AI Tutor</div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Bottom Split Section */}
-                    <div className="grid-2" style={{ marginTop: '28px' }}>
-                        
-                        {/* Recent Lectures */}
+                    <div className="grid-2">
                         <div className="card">
                             <div className="card-title">Recent Lectures</div>
-                            
                             <div className="lecture-item">
                                 <div className="lecture-icon">📊</div>
                                 <div className="lecture-info">
-                                    <div className="lecture-title">Data Structures & Algorithms</div>
-                                    <div className="lecture-meta">Week 4 • 32 slides • 18 cards generated</div>
+                                    <div className="lecture-title">Data Structures</div>
+                                    <div className="lecture-meta">32 slides • 18 cards</div>
                                 </div>
-                                <div className="lecture-progress-mini">
-                                    <div className="pct">72%</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>mastered</div>
-                                </div>
-                            </div>
-                            
-                            <div className="lecture-item">
-                                <div className="lecture-icon">🧬</div>
-                                <div className="lecture-info">
-                                    <div className="lecture-title">Cell Biology — Chapter 7</div>
-                                    <div className="lecture-meta">Yesterday • PDF • 24 cards generated</div>
-                                </div>
-                                <div className="lecture-progress-mini">
-                                    <div className="pct">45%</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>mastered</div>
-                                </div>
-                            </div>
-                            
-                            <div className="lecture-item">
-                                <div className="lecture-icon">⚖️</div>
-                                <div className="lecture-info">
-                                    <div className="lecture-title">Constitutional Law Overview</div>
-                                    <div className="lecture-meta">2 days ago • Notes • 12 cards generated</div>
-                                </div>
-                                <div className="lecture-progress-mini">
-                                    <div className="pct">91%</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>mastered</div>
-                                </div>
+                                <div className="lecture-progress-mini"><div className="pct">72%</div></div>
                             </div>
                         </div>
 
-                        {/* Streak Widget + Calendar */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div className="streak-widget">
                                 <div className="streak-flame">🔥</div>
-                                <div>
-                                    <div className="streak-count">12</div>
-                                    <div className="streak-label">Day Streak — Keep it going!</div>
-                                </div>
+                                <div><div className="streak-count">12</div><div className="streak-label">Keep it going!</div></div>
                             </div>
-                            
                             <div className="card">
                                 <div className="card-title">This Month</div>
-                                <div className="streak-calendar">
-                                    {renderCalendar()}
-                                </div>
+                                <div className="streak-calendar">{renderCalendar()}</div>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </main>
