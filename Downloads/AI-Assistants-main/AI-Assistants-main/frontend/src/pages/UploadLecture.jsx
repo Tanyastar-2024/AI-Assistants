@@ -1,11 +1,17 @@
 // src/pages/UploadLecture.jsx
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import mammoth from 'mammoth';
 import './UploadLecture.css';
+
+// Configure PDF.js worker (required for browser usage)
+// Using the CDN version so the worker script can be loaded at runtime.
+GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.5.207/pdf.worker.min.js`;
 
 // ─── File type helpers ────────────────────────────────────────────────────────
 const FILE_TYPES = {
@@ -124,6 +130,52 @@ export default function UploadLecture() {
     setTimeout(() => setToast(null), 3200);
   }, []);
 
+  // ── Load last saved lecture from Firestore (so results persist after navigation)
+  useEffect(() => {
+    const loadLastLecture = async () => {
+      if (!user) return;
+
+      try {
+        // Prefer the last lecture saved in localStorage (from this browser session)
+        const lastId = localStorage.getItem('studyquest_lastLectureId');
+        let lectureDoc = null;
+
+        if (lastId) {
+          const docRef = doc(db, 'lectures', lastId);
+          const snap = await getDoc(docRef);
+          if (snap.exists() && snap.data()?.userId === user.uid) {
+            lectureDoc = snap;
+          }
+        }
+
+        if (!lectureDoc) {
+          const q = query(
+            collection(db, 'lectures'),
+            where('userId', '==', user.uid),
+            orderBy('createdAt', 'desc'),
+            limit(1)
+          );
+          const snaps = await getDocs(q);
+          if (!snaps.empty) lectureDoc = snaps.docs[0];
+        }
+
+        if (lectureDoc) {
+          const data = lectureDoc.data();
+          setGeneratedContent(data.aiGenerated || null);
+          setFiles(data.files || []);
+          setPasteText(data.textContent || "");
+          setActiveTab('summary');
+          localStorage.setItem('studyquest_lastLectureId', lectureDoc.id);
+          showToast("Loaded last saved lecture.", "success");
+        }
+      } catch (error) {
+        console.warn("Failed to load previous lecture:", error);
+      }
+    };
+
+    loadLastLecture();
+  }, [user, showToast]);
+
   // ── File handling
   const addFiles = useCallback((newFiles) => {
     const valid = newFiles.filter((f) => Object.keys(FILE_TYPES).some((t) => f.type === t || f.name.endsWith(".md")));
@@ -138,16 +190,53 @@ export default function UploadLecture() {
   const removeFile = (idx) => setFiles((f) => f.filter((_, i) => i !== idx));
 
   // ── Extract text from files
+  const extractTextFromPdf = async (file) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await getDocument({ data: arrayBuffer }).promise;
+      let text = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map((item) => item.str).join(" ");
+        text += `${pageText}\n\n`;
+      }
+      return text.trim();
+    } catch (error) {
+      console.warn(`Failed to extract text from PDF ${file.name}:`, error);
+      return `[Content from ${file.name} - PDF could not be parsed]`;
+    }
+  };
+
+  const extractTextFromDocx = async (file) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value.trim();
+    } catch (error) {
+      console.warn(`Failed to extract text from DOCX ${file.name}:`, error);
+      return `[Content from ${file.name} - DOCX could not be parsed]`;
+    }
+  };
+
   const extractTextFromFiles = async (files) => {
     let extractedText = "";
-    
+
     for (const file of files) {
       try {
         if (file.type === "text/plain" || file.name.endsWith('.md') || file.name.endsWith('.txt')) {
           extractedText += await file.text() + "\n\n";
+        } else if (file.type === "application/pdf" || file.name.endsWith('.pdf')) {
+          extractedText += await extractTextFromPdf(file) + "\n\n";
+        } else if (
+          file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          file.type === "application/msword" ||
+          file.name.endsWith('.docx') ||
+          file.name.endsWith('.doc')
+        ) {
+          extractedText += await extractTextFromDocx(file) + "\n\n";
         } else {
-          // For PDFs, images, etc., we'd need proper parsing libraries
-          // For now, just add a placeholder with filename
+          // For other files (pptx, images, etc.) we fall back to a placeholder.
           extractedText += `[Content from ${file.name} - ${file.type}]\n\n`;
         }
       } catch (error) {
@@ -155,7 +244,7 @@ export default function UploadLecture() {
         extractedText += `[Error reading ${file.name}]\n\n`;
       }
     }
-    
+
     return extractedText.trim();
   };
 
@@ -352,10 +441,11 @@ export default function UploadLecture() {
       const aiContent = await generateAIContent(content);
       console.log("AI content generated:", aiContent);
 
-      // Step 4: Save everything to Firestore
+      // Step 4: Save everything to Firestore (including extracted text)
       console.log("Saving to Firestore...");
-      await saveLectureToFirestore(user.uid, uploadedFiles, pasteText, aiContent);
-      console.log("Saved to Firestore successfully");
+      const savedLectureId = await saveLectureToFirestore(user.uid, uploadedFiles, content, aiContent);
+      localStorage.setItem('studyquest_lastLectureId', savedLectureId);
+      console.log("Saved to Firestore successfully, id:", savedLectureId);
 
       setGeneratedContent(aiContent);
       showToast(`Lecture processed successfully! ${uploadedFiles.length} file(s) saved. (Note: File upload simulated due to CORS)`);
