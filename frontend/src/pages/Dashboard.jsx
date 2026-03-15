@@ -1,60 +1,54 @@
 // src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { auth, db } from '../firebase'; // Import Firebase
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    
-    // 1. Create a state variable to hold the user's name. Default is 'Scholar'
     const [userName, setUserName] = useState('Scholar');
 
-    // 2. Fetch the user's info when the dashboard loads
+    // Firebase Real-time Auth Listener
     useEffect(() => {
-        const fetchUser = async () => {
-            try {
-                const response = await fetch('http://localhost/study_app/api/user.php', {
-                    method: 'GET',
-                    credentials: 'include' // Must include this to send the session cookie!
-                });
-                const data = await response.json();
-
-                if (data.status === 'success') {
-                    // Update the state with their actual name
-                    setUserName(data.user.name);
-                } else {
-                    // If PHP says they aren't logged in, kick them out!
-                    navigate('/login');
+        // This function automatically runs whenever the login status changes
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // User IS logged in. Let's get their name from Firestore.
+                try {
+                    const docRef = doc(db, "users", user.uid);
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (docSnap.exists() && docSnap.data().name) {
+                        setUserName(docSnap.data().name); // Get name from database
+                    } else if (user.displayName) {
+                        setUserName(user.displayName); // Fallback to Google name
+                    }
+                } catch (error) {
+                    console.error("Error fetching user data:", error);
                 }
-            } catch (error) {
-                console.error("Failed to fetch user:", error);
+            } else {
+                // User is NOT logged in. Kick them to the login screen.
                 navigate('/login');
             }
-        };
+        });
 
-        fetchUser();
+        // Cleanup the listener when the component unmounts
+        return () => unsubscribe();
     }, [navigate]);
 
-    // 3. The secure logout function
+    // Firebase Secure Logout
     const handleLogout = async () => {
         try {
-            const response = await fetch('http://localhost/study_app/api/logout.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include'
-            });
-            const data = await response.json();
-            if (data.status === 'success') {
-                navigate('/login');
-            } else {
-                alert('Logout failed.');
-            }
+            await signOut(auth);
+            // We don't even need to navigate here, because onAuthStateChanged 
+            // will instantly see they logged out and kick them to /login automatically!
         } catch (error) {
             console.error('Error logging out:', error);
-            alert('Could not connect to server.');
+            alert('Logout failed.');
         }
     };
 
-    // 4. Generate the streak calendar days dynamically
     const renderCalendar = () => {
         const streakDays = [2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 15, 17];
         const days = [];
@@ -67,7 +61,6 @@ export default function Dashboard() {
         return days;
     };
 
-    // Extract just the first name for the big welcome message
     const firstName = userName.split(' ')[0];
 
     return (
@@ -91,7 +84,6 @@ export default function Dashboard() {
                     <div className="nav-item active">
                         <span className="nav-icon">⚡</span> Dashboard
                     </div>
-                    {/* Placeholder routes - we will build these pages next! */}
                     <div className="nav-item" onClick={() => alert("Upload page coming soon!")}>
                         <span className="nav-icon">📤</span> Upload Lecture
                     </div>
@@ -109,9 +101,6 @@ export default function Dashboard() {
                     <div className="nav-item" onClick={() => alert("AI Tutor coming soon!")}>
                         <span className="nav-icon">🤖</span> AI Tutor
                     </div>
-                    <div className="nav-item" onClick={() => alert("Camera coming soon!")}>
-                        <span className="nav-icon">📷</span> Camera AI
-                    </div>
                 </div>
 
                 <div className="nav-section">
@@ -123,7 +112,7 @@ export default function Dashboard() {
 
                 {/* Logout Button */}
                 <div className="nav-section" style={{ marginTop: 'auto' }}>
-                    <div className="nav-item" onClick={handleLogout} style={{ color: 'var(--pink)' }}>
+                    <div className="nav-item" onClick={handleLogout} style={{ color: 'var(--pink)', cursor: 'pointer' }}>
                         <span className="nav-icon">🚪</span> Log Out
                     </div>
                 </div>
