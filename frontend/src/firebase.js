@@ -1,9 +1,8 @@
+// frontend/src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-// import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
-// TODO: Replace this object with YOUR exact keys from the Firebase Console!
 const firebaseConfig = {
   apiKey: "AIzaSyDkE0EiGW0YTkOIPVtTQwqeKvkVJtW2O5c",
   authDomain: "ai-assist-f94fc.firebaseapp.com",
@@ -23,4 +22,3 @@ export const googleProvider = new GoogleAuthProvider();
 
 // Initialize Cloud Firestore and get a reference to the service
 export const db = getFirestore(app);
-
