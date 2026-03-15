@@ -1,11 +1,12 @@
 // src/pages/UploadLecture.jsx
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { addDoc, collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import { addDoc, collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import './UploadLecture.css';
 
@@ -102,6 +103,7 @@ const QuizQuestion = ({ question, index }) => {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function UploadLecture() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, userName } = useAuth();
 
   // Firebase Secure Logout
@@ -130,51 +132,80 @@ export default function UploadLecture() {
     setTimeout(() => setToast(null), 3200);
   }, []);
 
-  // ── Load last saved lecture from Firestore (so results persist after navigation)
+  // ── History (My Lectures) state
+  const [savedLectures, setSavedLectures] = useState([]);
+  const [lecturesLoading, setLecturesLoading] = useState(false);
+
+  const loadLectureById = useCallback(async (lectureId) => {
+    if (!user) return null;
+
+    try {
+      const docRef = doc(db, 'lectures', lectureId);
+      const snap = await getDoc(docRef);
+      if (!snap.exists()) return null;
+      const data = snap.data();
+      if (data.userId !== user.uid) return null;
+
+      setGeneratedContent(data.aiGenerated || null);
+      setFiles(data.files || []);
+      setPasteText(data.textContent || "");
+      setActiveTab('summary');
+      localStorage.setItem('studyquest_lastLectureId', lectureId);
+
+      return snap;
+    } catch (error) {
+      console.warn('Failed to load lecture by id:', lectureId, error);
+      return null;
+    }
+  }, [user]);
+
+  const loadSavedLectures = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      setLecturesLoading(true);
+      const q = query(
+        collection(db, 'lectures'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+      const snaps = await getDocs(q);
+      const lecturesData = snaps.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.() || new Date()
+      }));
+      setSavedLectures(lecturesData);
+    } catch (error) {
+      console.warn('Error loading saved lectures:', error);
+    } finally {
+      setLecturesLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
-    const loadLastLecture = async () => {
+    const init = async () => {
       if (!user) return;
 
-      try {
-        // Prefer the last lecture saved in localStorage (from this browser session)
-        const lastId = localStorage.getItem('studyquest_lastLectureId');
-        let lectureDoc = null;
+      await loadSavedLectures();
 
-        if (lastId) {
-          const docRef = doc(db, 'lectures', lastId);
-          const snap = await getDoc(docRef);
-          if (snap.exists() && snap.data()?.userId === user.uid) {
-            lectureDoc = snap;
-          }
+      const lectureIdFromState = location.state?.lectureId;
+      if (lectureIdFromState) {
+        const loaded = await loadLectureById(lectureIdFromState);
+        if (loaded) {
+          showToast('Loaded lecture from My Lectures.', 'success');
+          return;
         }
+      }
 
-        if (!lectureDoc) {
-          const q = query(
-            collection(db, 'lectures'),
-            where('userId', '==', user.uid),
-            orderBy('createdAt', 'desc'),
-            limit(1)
-          );
-          const snaps = await getDocs(q);
-          if (!snaps.empty) lectureDoc = snaps.docs[0];
-        }
-
-        if (lectureDoc) {
-          const data = lectureDoc.data();
-          setGeneratedContent(data.aiGenerated || null);
-          setFiles(data.files || []);
-          setPasteText(data.textContent || "");
-          setActiveTab('summary');
-          localStorage.setItem('studyquest_lastLectureId', lectureDoc.id);
-          showToast("Loaded last saved lecture.", "success");
-        }
-      } catch (error) {
-        console.warn("Failed to load previous lecture:", error);
+      const lastId = localStorage.getItem('studyquest_lastLectureId');
+      if (lastId) {
+        await loadLectureById(lastId);
       }
     };
 
-    loadLastLecture();
-  }, [user, showToast]);
+    init();
+  }, [user, location.state, loadSavedLectures, loadLectureById, showToast]);
 
   // ── File handling
   const addFiles = useCallback((newFiles) => {
@@ -219,6 +250,45 @@ export default function UploadLecture() {
     }
   };
 
+  const extractTextFromPptx = async (file) => {
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const slideFiles = Object.keys(zip.files)
+        .filter((name) => name.startsWith('ppt/slides/slide') && name.endsWith('.xml'))
+        .sort();
+
+      let text = '';
+      for (const slideName of slideFiles) {
+        const xml = await zip.file(slideName).async('string');
+        const matches = Array.from(xml.matchAll(/<a:t>(.*?)<\/a:t>/g));
+        const slideText = matches.map((m) => m[1]).join(' ');
+        if (slideText.trim()) text += `${slideText}\n\n`;
+      }
+
+      return text.trim() || `[Content from ${file.name} - PPTX could not be parsed]`;
+    } catch (error) {
+      console.warn(`Failed to extract text from PPTX ${file.name}:`, error);
+      return `[Content from ${file.name} - PPTX could not be parsed]`;
+    }
+  };
+
+  const extractTextFromImage = async (file) => {
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker({ logger: () => {} });
+      await worker.load();
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+
+      const { data } = await worker.recognize(file);
+      await worker.terminate();
+      return data?.text?.trim() || `[Content from ${file.name} - image could not be parsed]`;
+    } catch (error) {
+      console.warn(`Failed to OCR image ${file.name}:`, error);
+      return `[Content from ${file.name} - image could not be parsed]`;
+    }
+  };
+
   const extractTextFromFiles = async (files) => {
     let extractedText = "";
 
@@ -235,8 +305,17 @@ export default function UploadLecture() {
           file.name.endsWith('.doc')
         ) {
           extractedText += await extractTextFromDocx(file) + "\n\n";
+        } else if (
+          file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+          file.type === "application/vnd.ms-powerpoint" ||
+          file.name.endsWith('.pptx') ||
+          file.name.endsWith('.ppt')
+        ) {
+          extractedText += await extractTextFromPptx(file) + "\n\n";
+        } else if (file.type.startsWith('image/')) {
+          extractedText += await extractTextFromImage(file) + "\n\n";
         } else {
-          // For other files (pptx, images, etc.) we fall back to a placeholder.
+          // For other files we fall back to a placeholder.
           extractedText += `[Content from ${file.name} - ${file.type}]\n\n`;
         }
       } catch (error) {
@@ -334,53 +413,161 @@ export default function UploadLecture() {
 
   // ── AI Content Generation (Mock implementation)
   const generateAIContent = async (text) => {
-    // In a real implementation, this would call OpenAI API or similar
-    // Example integration:
-    // const response = await fetch('/api/generate-content', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ text, type: 'study-materials' })
-    // });
-    // const data = await response.json();
-    // return data;
-    
-    // For now, we'll simulate the generation with mock data
-    
+    // Analyze the text content and generate relevant study materials
     setIsProcessing(true);
-    
+
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const mockSummary = `This lecture covers key concepts in ${text.length > 100 ? 'advanced topics' : 'fundamental principles'}. The main points include understanding core theories, practical applications, and problem-solving approaches. Key takeaways focus on building a strong foundation for further learning.`;
-    
-    const mockFlashcards = [
-      { id: 1, question: "What is the main topic of this lecture?", answer: "The lecture covers fundamental concepts and their applications." },
-      { id: 2, question: "What are the key takeaways?", answer: "Building a strong foundation and understanding practical applications." },
-      { id: 3, question: "How should you approach the material?", answer: "Focus on understanding core theories and problem-solving approaches." },
-      { id: 4, question: "What is the importance of this subject?", answer: "It provides essential knowledge for advanced topics and real-world applications." }
-    ];
-    
-    const mockQuiz = [
-      {
-        id: 1,
-        question: "What is the primary focus of this lecture?",
-        options: ["Basic concepts", "Advanced theories", "Practical applications", "All of the above"],
-        correct: 3
-      },
-      {
-        id: 2,
-        question: "Which approach is recommended for studying this material?",
-        options: ["Memorization only", "Understanding core principles", "Skipping difficult parts", "Relying on external help"],
-        correct: 1
+
+    // Clean and prepare the text for analysis
+    const cleanText = text.trim();
+    const wordCount = cleanText.split(/\s+/).length;
+    const sentences = cleanText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+
+    // Extract key concepts and topics from the text
+    const extractKeyTopics = (text) => {
+      const commonTopics = [
+        'machine learning', 'artificial intelligence', 'data science', 'programming',
+        'algorithms', 'database', 'networking', 'security', 'web development',
+        'mathematics', 'physics', 'chemistry', 'biology', 'history', 'literature',
+        'economics', 'psychology', 'sociology', 'philosophy', 'statistics'
+      ];
+
+      const foundTopics = commonTopics.filter(topic =>
+        text.toLowerCase().includes(topic.toLowerCase())
+      );
+
+      // If no specific topics found, try to extract from first few sentences
+      if (foundTopics.length === 0) {
+        const firstSentence = sentences[0]?.trim() || '';
+        const words = firstSentence.split(/\s+/).slice(0, 3);
+        return words.join(' ');
       }
-    ];
-    
+
+      return foundTopics.slice(0, 2).join(' and ') || 'the subject matter';
+    };
+
+    const keyTopics = extractKeyTopics(cleanText);
+
+    // Generate dynamic summary based on content
+    const generateSummary = (text, topics) => {
+      const complexity = wordCount > 500 ? 'comprehensive' : wordCount > 200 ? 'detailed' : 'concise';
+      const mainPoints = sentences.slice(0, 3).map(s => s.trim()).join('. ') + '.';
+
+      return `This ${complexity} lecture covers key concepts in ${topics}. ${mainPoints} The material emphasizes understanding core principles, practical applications, and problem-solving approaches. Key takeaways focus on building a strong foundation for further learning and real-world implementation.`;
+    };
+
+    // Generate flashcards based on content analysis
+    const generateFlashcards = (text, topics) => {
+      const flashcards = [];
+
+      // Extract potential questions from the text content
+      const textSentences = sentences.slice(0, 6);
+      textSentences.forEach((sentence, index) => {
+        if (sentence.trim().length > 20) {
+          const words = sentence.trim().split(/\s+/);
+          if (words.length > 5) {
+            const question = `What does the lecture say about ${words.slice(0, 3).join(' ').toLowerCase()}?`;
+            const answer = sentence.trim() + '.';
+            flashcards.push({
+              id: index + 1,
+              question,
+              answer
+            });
+          }
+        }
+      });
+
+      // Ensure we have at least 4 flashcards with content-specific questions
+      while (flashcards.length < 4) {
+        const remaining = 4 - flashcards.length;
+        const baseQuestions = [
+          `What is the main focus of this lecture on ${topics}?`,
+          `What are the key takeaways from studying ${topics}?`,
+          `How should you approach learning ${topics}?`,
+          `Why is understanding ${topics} important?`
+        ];
+
+        const baseAnswers = [
+          `The lecture focuses on fundamental concepts and practical applications of ${topics}.`,
+          `Key takeaways include understanding core principles, problem-solving approaches, and real-world implementation.`,
+          `Approach ${topics} by building strong foundations, practicing regularly, and applying concepts practically.`,
+          `Understanding ${topics} is essential for advanced learning and professional applications in the field.`
+        ];
+
+        for (let i = flashcards.length; i < 4; i++) {
+          flashcards.push({
+            id: i + 1,
+            question: baseQuestions[i],
+            answer: baseAnswers[i]
+          });
+        }
+      }
+
+      return flashcards.slice(0, 4);
+    };
+
+    // Generate quiz questions based on content
+    const generateQuiz = (text, topics) => {
+      const quiz = [];
+
+      // Generate quiz questions with content-aware options
+      const quizTemplates = [
+        {
+          question: `What is the primary focus of this lecture on ${topics}?`,
+          options: [
+            `Fundamental concepts and theory of ${topics}`,
+            `Advanced applications and implementations`,
+            `Historical background and development`,
+            `All of the above`
+          ],
+          correct: 3
+        },
+        {
+          question: `Which approach is most effective for studying ${topics}?`,
+          options: [
+            `Memorization of facts and definitions`,
+            `Understanding core principles and applications`,
+            `Focusing only on practical examples`,
+            `Avoiding complex problem-solving`
+          ],
+          correct: 1
+        },
+        {
+          question: `What are the key takeaways from this ${topics} lecture?`,
+          options: [
+            `Basic terminology and definitions`,
+            `Core principles and problem-solving skills`,
+            `Historical context and timeline`,
+            `Only practical implementation details`
+          ],
+          correct: 1
+        },
+        {
+          question: `Why is understanding ${topics} important?`,
+          options: [
+            `Only for academic requirements`,
+            `For building a foundation for advanced topics`,
+            `Just for passing examinations`,
+            `Not really necessary in practice`
+          ],
+          correct: 1
+        }
+      ];
+
+      return quizTemplates.slice(0, Math.min(4, quizTemplates.length));
+    };
+
+    const summary = generateSummary(cleanText, keyTopics);
+    const flashcards = generateFlashcards(cleanText, keyTopics);
+    const quiz = generateQuiz(cleanText, keyTopics);
+
     setIsProcessing(false);
-    
+
     return {
-      summary: mockSummary,
-      flashcards: mockFlashcards,
-      quiz: mockQuiz
+      summary,
+      flashcards,
+      quiz
     };
   };
 
@@ -447,6 +634,9 @@ export default function UploadLecture() {
       localStorage.setItem('studyquest_lastLectureId', savedLectureId);
       console.log("Saved to Firestore successfully, id:", savedLectureId);
 
+      // Refresh the local lecture list so the new lecture appears immediately
+      await loadSavedLectures();
+
       setGeneratedContent(aiContent);
       showToast(`Lecture processed successfully! ${uploadedFiles.length} file(s) saved. (Note: File upload simulated due to CORS)`);
 
@@ -494,6 +684,9 @@ export default function UploadLecture() {
                 </div>
                 <div className="nav-item active">
                     <span className="nav-icon">📤</span> Upload Lecture
+                </div>
+                <div className="nav-item" onClick={() => navigate('/lectures')}>
+                    <span className="nav-icon">📚</span> My Lectures
                 </div>
             </div>
 
@@ -564,6 +757,44 @@ export default function UploadLecture() {
                     <div className="sq-noise" />
 
                     <div className="sq-content">
+                        {/* ── Load a past lecture */}
+                        {(savedLectures.length > 0 || lecturesLoading) && (
+                          <div className="sq-card" style={{ marginBottom: '22px' }}>
+                            <div className="sq-card-title">Load from My Lectures</div>
+                            {lecturesLoading ? (
+                              <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Loading your lectures...</div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {savedLectures.slice(0, 4).map((lecture) => (
+                                  <div key={lecture.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700 }}>{lecture.title}</div>
+                                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        {lecture.createdAt?.toLocaleString?.() || ''}
+                                      </div>
+                                    </div>
+                                    <button
+                                      className="sq-btn sq-btn-ghost"
+                                      style={{ fontSize: '12px', padding: '6px 10px' }}
+                                      onClick={() => {
+                                        loadLectureById(lecture.id);
+                                        showToast('Loaded lecture into the editor.', 'success');
+                                      }}
+                                    >
+                                      Load
+                                    </button>
+                                  </div>
+                                ))}
+                                {savedLectures.length > 4 && (
+                                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                    Showing 4 of {savedLectures.length}. Visit My Lectures to access all.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* ── Drop zone */}
                         <div
                             className={`sq-drop-zone${dragOver ? " drag-over" : ""}`}

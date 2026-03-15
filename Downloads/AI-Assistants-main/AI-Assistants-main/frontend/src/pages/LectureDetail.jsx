@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 
 export default function LectureDetail() {
   const navigate = useNavigate();
@@ -13,8 +13,6 @@ export default function LectureDetail() {
   const [lecture, setLecture] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('summary');
-  const [editingText, setEditingText] = useState(false);
-  const [editedText, setEditedText] = useState('');
 
   // Load lecture when user is available
   useEffect(() => {
@@ -44,7 +42,6 @@ export default function LectureDetail() {
         }
 
         setLecture(lectureData);
-        setEditedText(lectureData.textContent || '');
       } else {
         alert('Lecture not found.');
         navigate('/lectures');
@@ -63,20 +60,6 @@ export default function LectureDetail() {
       await signOut(auth);
     } catch (error) {
       console.error('Error logging out:', error);
-    }
-  };
-
-  const handleSaveText = async () => {
-    try {
-      await updateDoc(doc(db, 'lectures', lectureId), {
-        textContent: editedText
-      });
-
-      setLecture({ ...lecture, textContent: editedText });
-      setEditingText(false);
-    } catch (error) {
-      console.error('Error updating text content:', error);
-      alert('Failed to save changes. Please try again.');
     }
   };
 
@@ -295,12 +278,6 @@ export default function LectureDetail() {
               >
                 🎯 Quiz ({lecture.aiGenerated?.quiz?.length || 0})
               </button>
-              <button
-                className={`tab-button ${activeTab === 'text' ? 'active' : ''}`}
-                onClick={() => setActiveTab('text')}
-              >
-                📄 Raw Text
-              </button>
             </div>
 
             <div className="tab-content">
@@ -342,95 +319,6 @@ export default function LectureDetail() {
                 </div>
               )}
 
-              {activeTab === 'text' && (
-                <div className="text-content">
-                  <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3>📄 Raw Text Content</h3>
-                    {!editingText ? (
-                      <button
-                        onClick={() => setEditingText(true)}
-                        style={{
-                          padding: '6px 12px',
-                          background: 'var(--purple)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '12px'
-                        }}
-                      >
-                        ✏️ Edit
-                      </button>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={handleSaveText}
-                          style={{
-                            padding: '6px 12px',
-                            background: 'var(--green)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          ✓ Save
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingText(false);
-                            setEditedText(lecture.textContent || '');
-                          }}
-                          style={{
-                            padding: '6px 12px',
-                            background: 'var(--text-muted)',
-                            color: 'var(--text)',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          ✕ Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {editingText ? (
-                    <textarea
-                      value={editedText}
-                      onChange={(e) => setEditedText(e.target.value)}
-                      style={{
-                        width: '100%',
-                        minHeight: '300px',
-                        padding: '12px',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        background: 'var(--card)',
-                        color: 'var(--text)',
-                        fontFamily: 'inherit',
-                        fontSize: '14px',
-                        lineHeight: '1.5',
-                        resize: 'vertical'
-                      }}
-                    />
-                  ) : (
-                    <div style={{
-                      whiteSpace: 'pre-wrap',
-                      lineHeight: '1.6',
-                      padding: '16px',
-                      background: 'rgba(255,255,255,0.02)',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border)',
-                      minHeight: '200px'
-                    }}>
-                      {lecture.textContent || 'No text content available'}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -518,10 +406,6 @@ export default function LectureDetail() {
         .flashcards-content, .quiz-content {
           max-height: 600px;
           overflow-y: auto;
-        }
-
-        .text-content {
-          font-family: 'Nunito', sans-serif;
         }
       `}</style>
     </div>
