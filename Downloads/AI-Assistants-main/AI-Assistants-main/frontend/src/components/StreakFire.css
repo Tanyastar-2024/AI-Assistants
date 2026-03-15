@@ -1,0 +1,116 @@
+/* src/components/StreakFire.css */
+.streak-fire-container {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    margin: 0 auto;
+}
+
+.streak-fire-container.small {
+    width: 30px;
+    height: 30px;
+}
+
+.flame {
+    position: absolute;
+    bottom: 0;
+    border-radius: 50% 0 50% 50%;
+    transform: rotate(-45deg);
+}
+
+.main-flame {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #ff9b44, #ff5e3a);
+    box-shadow: 0 0 20px rgba(255, 94, 58, 0.6);
+    animation: flicker-main 0.8s infinite alternate ease-in-out;
+}
+
+.inner-flame {
+    width: 60%;
+    height: 60%;
+    background: linear-gradient(135deg, #ffd66b, #ff9b44);
+    bottom: 5px;
+    animation: flicker-inner 0.6s infinite alternate ease-in-out;
+}
+
+/* Calm (streak 0) */
+.streak-fire-container.calm .main-flame {
+    background: linear-gradient(135deg, #888, #555);
+    box-shadow: none;
+    animation: calm-flicker 2s infinite alternate ease-in-out;
+}
+.streak-fire-container.calm .inner-flame {
+    background: linear-gradient(135deg, #aaa, #777);
+}
+
+/* New (streak 1) */
+.streak-fire-container.new .main-flame {
+    background: linear-gradient(135deg, #ffc73a, #ff9b44);
+    box-shadow: 0 0 10px rgba(255, 155, 68, 0.4);
+    animation: flicker-main 1.2s infinite alternate ease-in-out;
+}
+
+/* Growing (streak 2-4) is default main colors */
+
+/* Blaze (streak 5-9) */
+.streak-fire-container.blaze .main-flame {
+    background: linear-gradient(135deg, #ff5e3a, #ff0055);
+    box-shadow: 0 0 25px rgba(255, 0, 85, 0.6);
+    animation: flicker-main 0.6s infinite alternate ease-in-out;
+}
+.streak-fire-container.blaze .inner-flame {
+    background: linear-gradient(135deg, #ff9b44, #fff);
+}
+
+/* Inferno (streak 10+) */
+.streak-fire-container.inferno .main-flame {
+    background: linear-gradient(135deg, #b47aff, #ff0055);
+    box-shadow: 0 0 35px rgba(180, 122, 255, 0.8);
+    animation: flicker-main 0.4s infinite alternate ease-in-out;
+}
+.streak-fire-container.inferno .inner-flame {
+    background: linear-gradient(135deg, #ffc73a, #fff);
+}
+
+/* Sparks */
+.spark {
+    width: 8px;
+    height: 8px;
+    background: #ffd66b;
+    border-radius: 50%;
+    bottom: 50%;
+    opacity: 0;
+}
+
+.spark1 { animation: spark-fly 1s infinite linear; left: 20%; }
+.spark2 { animation: spark-fly 1.2s infinite linear 0.4s; right: 20%; }
+.spark3 { animation: spark-fly 0.8s infinite linear 0.2s; left: 50%; }
+.spark4 { animation: spark-fly 0.9s infinite linear 0.6s; right: 40%; background: #b47aff; }
+
+@keyframes flicker-main {
+    0% { transform: rotate(-45deg) scale(0.95); }
+    100% { transform: rotate(-45deg) scale(1.05); }
+}
+
+@keyframes flicker-inner {
+    0% { transform: rotate(-45deg) scale(0.9); }
+    100% { transform: rotate(-45deg) scale(1.1); }
+}
+
+@keyframes calm-flicker {
+    0% { transform: rotate(-45deg) scale(0.98); opacity: 0.8;}
+    100% { transform: rotate(-45deg) scale(1); opacity: 1;}
+}
+
+@keyframes spark-fly {
+    0% { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-30px) scale(0.5); opacity: 0; }
+}
+
+/* Small Variant Adjustments */
+.streak-fire-container.small .spark { width: 4px; height: 4px; }
+.streak-fire-container.small .inner-flame { bottom: 2px; }
